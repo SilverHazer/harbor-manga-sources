@@ -1,0 +1,13 @@
+{
+  "name": "Harbor MangaDex Sources",
+  "plugins": [
+    {
+      "id": "mangadex-en",
+      "name": "MangaDex (English)",
+      "version": "1.0.0",
+      "lang": "en",
+      "nsfw": false,
+      "entry": "mangadex.plugin.js"
+    }
+  ]
+}
