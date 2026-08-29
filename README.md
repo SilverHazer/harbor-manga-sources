@@ -22,7 +22,7 @@ public API rather than scraping web pages.
 For GitHub, commit both files at the repository root and use a URL like:
 
 ```text
-https://raw.githubusercontent.com/OWNER/REPOSITORY/main/repo.json
+https://raw.githubusercontent.com/wesazx/harbor-mangadex-source/main/repo.json
 ```
 
 The `entry` in `repo.json` is relative, so Harbor will load the plugin file from the same
