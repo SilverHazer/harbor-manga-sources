@@ -104,7 +104,10 @@ This project was inspired by and built upon the foundation of:
 - **[Harbor Stremio](https://github.com/harborstremio/harbor)** for creating an exceptional, modern desktop client for anime, movies, series, and manga.
 - The open-source teams behind **[FlareSolverr](https://github.com/FlareSolverr/FlareSolverr)** and **[MangaDex](https://mangadex.org)** for their outstanding public APIs and tools.
 
----
+👥 Contributors & Maintainers
+@wesazx – Original creator & Atsu provider
+@SilverHazer – MangaDex rewrite, Comix.to signed API provider, and automated test suite
+—
 
 ## 📄 Disclaimer & License
 
