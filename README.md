@@ -1,64 +1,64 @@
 # Harbor Manga Sources 📚
 
-Een geoptimaliseerde, stabiele en snelle manga-repository voor de [Harbor Stremio Desktop Client](https://github.com/harborstremio/harbor).
+An optimized, stable, and high-performance manga repository for the [Harbor Stremio Desktop Client](https://github.com/harborstremio/harbor).
 
-Deze repository breidt Harbor uit met betrouwbare providers voor de populairste manga-platformen, met ingebouwde bescherming tegen netwerk-timeouts, rate-limits en Cloudflare bot-beveiliging.
+This repository extends Harbor with robust providers for the most popular manga platforms, featuring built-in protections against network timeouts, API rate limits, and Cloudflare anti-bot challenges.
 
 ---
 
-## 🚀 Snelle Installatie in Harbor
+## 🚀 Quick Installation in Harbor
 
-1. Start de **Harbor** app.
-2. Ga in het linker menu naar **Manga** > klik op **Set up a source** (of het tandwiel/bronnen-icoon) > **Extensions**.
-3. Voer in het veld **Repository URL** de volgende link in en klik op **Add Repository**:
+1. Launch the **Harbor** app.
+2. In the left navigation menu, navigate to **Manga** > click **Set up a source** (or the gear/source icon) > **Extensions**.
+3. In the **Repository URL** field, paste the following link and click **Add Repository**:
    ```text
    https://raw.githubusercontent.com/SilverHazer/harbor-manga-sources/main/repo.json
    ```
-4. Je ziet nu de beschikbare extensies in de lijst verschijnen:
+4. You will see the available extensions appear in the list:
    - **MangaDex (English)** (`mangadex-en` v1.0.0)
    - **Atsu (English)** (`atsu-en` v1.1.0)
    - **Comix.to (English)** (`comix-en` v1.0.0)
-5. Klik op **Install** naast de gewenste extensies en selecteer je favoriete bron als actieve provider!
+5. Click **Install** next to your preferred extensions and select your desired source as the active provider!
 
 ---
 
-## 📖 Complete Walkthrough & Architectuur
+## 📖 Complete Walkthrough & Architecture
 
-Harbor voert manga-extensies uit in een geïsoleerde JavaScript runtime sandbox. Om maximale stabiliteit en snelheid te garanderen zonder ontbrekende pagina's of crashes, gebruikt elke bron in deze repository een gespecialiseerde architectuur:
+Harbor executes manga extensions inside an isolated JavaScript runtime sandbox. To achieve rock-solid stability and rapid page loading without missing chapters or crashes, each source in this repository implements a specialized architecture:
 
 ### 1. MangaDex Provider (`mangadex.plugin.js`)
 * **API**: MangaDex REST API v5 (`https://api.mangadex.org`).
-* **Het Probleem**: MangaDex handhaaft een strikte limiet van circa 5 requests per seconde per IP. Wanneer Harbor snel manga-posters, hoofdstuklijsten of paginabronnen opvraagt, resulteerde dit standaard in `HTTP 429 Too Many Requests`, waardoor hoofdstukken leeg bleven of pagina's ontbraken.
-* **Onze Oplossing**:
-  - **Request Pacing**: Alle uitgaande API-calls worden via een interne wachtrij geleid met een minimale vertraging van 260ms tussen opeenvolgende verzoeken.
-  - **Exponentiële Backoff**: Mocht er toch een netwerkfout of 429 optreden, voert de plugin automatisch tot 4 retries uit met toenemende vertraging (`attempt * 1000ms`).
-  - **Filteren van externe licentielinks**: MangaDex bevat vaak hoofdstukken die gehost worden op externe platforms (zoals MangaPlus of Webnovel) zonder afbeeldingen op MangaDex zelf (`pages: 0`). Deze worden nu automatisch uitgefilterd via `includeExternalUrl=0` zodat je uitsluitend direct leesbare hoofdstukken te zien krijgt.
-  - **Directe CDN Image Resolving**: Pagina-afbeeldingen worden rechtstreeks opgelost via het officiële `/at-home/server/{chapterId}` endpoint naar snelle MangaDex CDN-nodes.
+* **The Problem**: MangaDex strictly enforces a rate limit of approximately 5 requests per second per IP. When Harbor rapidly queries manga metadata, chapter lists, and page batches, unthrottled requests trigger `HTTP 429 Too Many Requests`, resulting in empty chapter lists or missing pages.
+* **Our Solution**:
+  - **Request Pacing**: All outgoing API calls are routed through an internal queue with a minimum delay of 260ms between consecutive requests.
+  - **Exponential Backoff**: In the rare event of a network error or 429 status, the plugin automatically retries up to 4 times with progressive backoff (`attempt * 1000ms`).
+  - **External License Filtering**: MangaDex indexes many chapters hosted on external platforms (such as MangaPlus, Webnovel, or Tapas) that contain zero image files on MangaDex (`pages: 0`). These are automatically excluded using `includeExternalUrl=0` and attribute filtering, ensuring you only receive directly readable chapters.
+  - **Direct CDN Image Resolution**: Page images are resolved directly via the official MangaDex@Home endpoint (`/at-home/server/{chapterId}`) to high-speed CDN nodes.
 
 ### 2. Atsu.moe Provider (`atsu.plugin.js`)
 * **API**: Atsu.moe GraphQL / REST endpoints (`https://atsu.moe/api/v1`).
-* **Het Probleem**: De originele implementatie hanteerde een strakke timeout van slechts 8.000 milliseconden (8 seconden). Atsu.moe heeft tijdens piekuren regelmatig pieken in responstijd, wat leidde tot abrupte `FetchError` timeouts en afgebroken downloads.
-* **Onze Oplossing**:
-  - **Verhoogde Timeout Limiet**: De netwerk-timeout is verhoogd naar 30.000ms (30 seconden) via `AbortController`.
-  - **3-traps Retry Systeem**: Bij een verbroken verbinding of server-timeout probeert de plugin het verzoek automatisch tot 3 keer opnieuw met een exponentiële backoff.
-  - **Beveiligde Concurrency**: Voorkomt overbelasting van de sessie bij het ophalen van grote hoeveelheden paginabronnen tegelijk.
+* **The Problem**: The original implementation enforced an aggressive 8,000ms (8-second) timeout. During peak traffic hours, Atsu.moe experiences response latency spikes, causing premature `FetchError` aborts and broken chapter downloads.
+* **Our Solution**:
+  - **Increased Timeout Limit**: Extended the request timeout to 30,000ms (30 seconds) using `AbortController`.
+  - **3-Stage Retry System**: Automatically retries failed requests up to 3 times with exponential backoff upon network drops or server timeouts.
+  - **Safe Concurrency**: Prevents session starvation when retrieving large volumes of page assets concurrently.
 
 ### 3. Comix.to Provider (`comix.plugin.js`)
 * **Platform**: Comix.to (`https://comix.to`).
-* **Het Probleem**: Comix.to bevindt zich achter Cloudflare bot-bescherming (JavaScript challenges en Turnstile). Een standaard HTTP-fetch vanuit Harbor stuit direct op een `HTTP 403 Forbidden` challenge-pagina. Daarnaast heeft Harbor een strenge **SSRF security filter** (`assertNetworkSafeUrl`) die verzoeken naar `localhost` of `127.0.0.1` blokkeert.
-* **Onze Oplossing**:
-  - **FlareSolverr Proxy Bridge**: De plugin communiceert met een lokale FlareSolverr-instantie om de Cloudflare challenge op te lossen en de echte HTML van Comix.to op te halen.
-  - **De `localtest.me` SSRF Bypass**: Harbor weigert requests naar `http://localhost:8191` met de melding `blocked private host`. Om dit op te lossen maakt de plugin verbinding via `http://localtest.me:8191/v1`. Omdat `localtest.me` een publiek geregistreerde domeinnaam is die via publieke DNS altijd verwijst naar `127.0.0.1`, accepteert Harbor de URL en bereikt het veilig je lokale FlareSolverr!
-  - **Multi-Anchor DOM Parser**: Omdat Comix.to de titel en de omslagafbeelding over meerdere gescheiden `<a>` elementen verdeelt, bevat de parser een geavanceerde normalisatie die posters en titels koppelt op basis van unieke URL-slugs.
+* **The Problem**: Comix.to is protected by Cloudflare bot mitigation (JavaScript challenges & Turnstile). Standard HTTP fetch requests from Harbor immediately encounter `HTTP 403 Forbidden`. Furthermore, Harbor implements a strict **SSRF security filter** (`assertNetworkSafeUrl`) that outright blocks requests targeting `localhost` or `127.0.0.1` (`blocked private host`).
+* **Our Solution**:
+  - **FlareSolverr Proxy Bridge**: The plugin communicates with a local FlareSolverr instance to solve Cloudflare challenges and return the authenticated HTML DOM.
+  - **The `localtest.me` SSRF Bypass**: Harbor rejects `http://localhost:8191` as a forbidden private host. To circumvent this without disabling Harbor's security engine, the plugin connects via `http://localtest.me:8191/v1`. Because `localtest.me` is a public DNS domain that officially resolves to `127.0.0.1`, Harbor accepts the URL and securely forwards the request to your local FlareSolverr instance!
+  - **Multi-Anchor DOM Parser**: Comix.to splits poster images and title strings across separate `<a>` anchor tags. The parser correlates title tags (`aria-label`) and poster tags (`lrow__poster`) by extracting and matching their common URL slug.
 
 ---
 
-## 🛡️ FlareSolverr Setup (Vereist voor Comix.to)
+## 🛡️ FlareSolverr Setup (Required for Comix.to)
 
-Comix.to heeft FlareSolverr nodig om Cloudflare te passeren. Atsu en MangaDex werken direct zonder extra hulpprogramma's.
+Comix.to requires FlareSolverr to bypass Cloudflare. Atsu and MangaDex operate directly without any third-party background services.
 
-### Optie A: Via Docker (Aanbevolen)
-Draai FlareSolverr eenvoudig op de achtergrond via Docker:
+### Option A: Using Docker (Recommended)
+Run FlareSolverr in the background via Docker:
 ```bash
 docker run -d \
   --name=flaresolverr \
@@ -68,78 +68,76 @@ docker run -d \
   ghcr.io/flaresolverr/flaresolverr:latest
 ```
 
-### Optie B: Zonder Docker (Windows Standalone Binary)
-1. Download de nieuwste release van [FlareSolverr GitHub Releases](https://github.com/FlareSolverr/FlareSolverr/releases) (`flaresolverr_windows_x64.zip`).
-2. Pak het zip-bestand uit in een map naar keuze (bijv. `C:\FlareSolverr`).
-3. Start `flaresolverr.exe`. Het programma luistert standaard op poort `8191`.
+### Option B: Without Docker (Windows Standalone Binary)
+1. Download the latest release from [FlareSolverr GitHub Releases](https://github.com/FlareSolverr/FlareSolverr/releases) (`flaresolverr_windows_x64.zip`).
+2. Extract the archive into a folder of your choice (e.g. `C:\FlareSolverr`).
+3. Run `flaresolverr.exe`. The service listens on port `8191` by default.
 
-### Verifiëren
-Open je browser of voer in PowerShell/terminal het volgende commando uit:
+### Verification
+Open your browser or run the following command in PowerShell / terminal:
 ```bash
 curl http://localhost:8191/
 ```
-Als je het volgende antwoord ziet, is FlareSolverr klaar voor gebruik:
+When working correctly, it will respond with:
 ```json
 {"msg": "FlareSolverr is ready!", "version": "v3.3.21"}
 ```
 
 ---
 
-## 🔄 Aanpassingen t.o.v. de Originele Repository
+## 🔄 Changelog & Differences vs. Original Repository
 
-Deze repository is een fork van [`wesazx/harbor-atsu-source`](https://github.com/wesazx/harbor-atsu-source). Hieronder vind je een overzicht van de doorgevoerde verbeteringen en toevoegingen:
+This repository is a fork of [`wesazx/harbor-atsu-source`](https://github.com/wesazx/harbor-atsu-source). Below is an overview of the key improvements and architectural additions:
 
-| Onderdeel | Origineel (`wesazx/harbor-atsu-source`) | Onze Fork (`SilverHazer/harbor-manga-sources`) |
+| Component | Original (`wesazx/harbor-atsu-source`) | This Fork (`SilverHazer/harbor-manga-sources`) |
 | :--- | :--- | :--- |
-| **MangaDex Provider** | Oorspronkelijk verwijderd wegens instabiliteit en rate-limit fouten (`f2a6109`). | **Volledig herbouwd en geoptimaliseerd**: Voorzien van een 260ms request-queue, 4-traps exponential backoff bij 429-errors, filteren van unhosted externe hoofdstukken, en caching van API responses. |
-| **Atsu.moe Provider** | Vaste timeout van 8000ms, geen automatische retries bij netwerkfouten. | **Versterkte netwerk-laag**: Timeout verhoogd naar 30.000ms, automatische 3-traps retry met exponentiële backoff bij server-drops. |
-| **Comix.to Provider** | Niet aanwezig. | **Nieuwe bron toegevoegd**: Volledige catalogus en hoofdstukscraper met FlareSolverr Cloudflare-bypass en `localtest.me` SSRF-oplossing. |
-| **Repository Manifest (`repo.json`)** | Bevat uitsluitend `atsu-en`. | Bevat alle 3 bronnen (`mangadex-en`, `atsu-en`, `comix-en`) met geactualiseerde versienummers en metadata. |
-| **Validatie & Tooling** | Geen geautomatiseerde testscripts aanwezig. | Toegevoegd testframework (`npm test`) om netwerk- en paginabronnen direct buiten Harbor te kunnen testen en monitoren. |
-| **Documentatie** | Beknopte instructies voor alleen Atsu. | Uitgebreide Nederlandse handleiding, installatie-walkthrough, architectuurdetails en FlareSolverr setupgids. |
+| **MangaDex Provider** | Previously removed due to instability and rate-limiting issues (`f2a6109`). | **Completely rebuilt & optimized**: Features a 260ms request-pacing queue, 4-stage exponential backoff against 429 rate limits, automatic filtering of unhosted external links (`pages: 0`), and direct MangaDex@Home CDN image resolution. |
+| **Atsu.moe Provider** | Hardcoded 8,000ms timeout with no automatic retries. | **Reinforced network layer**: Timeout increased to 30,000ms, automatic 3-stage retry with exponential backoff on connection drops. |
+| **Comix.to Provider** | Not present. | **Brand new source**: Full catalog scraping and chapter reading powered by a FlareSolverr Cloudflare bridge and the `localtest.me` SSRF workaround. |
+| **Manifest (`repo.json`)** | Contained only `atsu-en`. | Registers all 3 sources (`mangadex-en`, `atsu-en`, `comix-en`) with updated versioning and metadata. |
+| **Testing & Tooling** | No automated testing or verification scripts. | Added automated test suite (`npm test`, `npm run check`) to validate plugin contracts and live API endpoints outside of Harbor. |
+| **Documentation** | Minimal setup instructions for Atsu only. | Comprehensive documentation, full walkthrough, architecture breakdown, and troubleshooting guide. |
 
 ---
 
-## 💡 Alternatief / Back-up: Suwayomi (Tachidesk) binnen Harbor
+## 💡 Alternative / Backup: Suwayomi (Tachidesk) inside Harbor
 
-Wist je dat Harbor ook ingebouwde ondersteuning biedt voor **Suwayomi**?
-- **Waar vind je dit?** In Harbor onder **Manga** > **Set up a source** vind je een directe optie om een Suwayomi Server te koppelen (standaard host: `http://localhost:4567`).
-- **Wat is het voordeel?** Suwayomi fungeert als een lokale server die het volledige Tachiyomi/Keiyoushi ecosysteem (meer dan 1.000 extensies wereldwijd) kan hosten.
-- Mocht een directe Harbor JavaScript-plugin ooit tijdelijk offline zijn door website-veranderingen, dan biedt Suwayomi een onbeperkte back-up catalogus binnen dezelfde vertrouwde Harbor interface.
+Did you know that Harbor also provides native, first-class support for **Suwayomi**?
+- **Where to find it?** In Harbor under **Manga** > **Set up a source**, you will find an option to connect directly to a Suwayomi Server (default port: `http://localhost:4567`).
+- **What is the benefit?** Suwayomi runs locally as a backend server hosting the entire Tachiyomi / Keiyoushi ecosystem (over 1,000+ sources worldwide).
+- If any standalone JavaScript scraper ever temporarily breaks due to upstream website redesigns, Suwayomi serves as an unlimited fallback library directly within Harbor.
 
 ---
 
-## 🧪 Lokaal Ontwikkelen & Testen
+## 🧪 Local Development & Testing
 
-Wil je zelf wijzigingen aanbrengen of een bron testen?
+Want to make changes or test a provider locally?
 
-1. Kloon deze repository:
+1. Clone this repository:
    ```bash
    git clone https://github.com/SilverHazer/harbor-manga-sources.git
    cd harbor-manga-sources
    ```
-2. Installeer dependencies (optioneel, voor tests):
+2. Run the automated test suite:
    ```bash
    npm test
    ```
-3. Valideer de syntax van alle JavaScript plugins:
+3. Validate syntax across all JavaScript plugins:
    ```bash
-   node --check mangadex.plugin.js
-   node --check atsu.plugin.js
-   node --check comix.plugin.js
+   npm run check
    ```
 
 ---
 
-## 🙏 Credits & Dankwoord
+## 🙏 Credits & Acknowledgements
 
-Dit project is geïnspireerd door en gebouwd op het fundament van:
-- **[wesazx](https://github.com/wesazx)** voor de originele [`harbor-atsu-source`](https://github.com/wesazx/harbor-atsu-source) repository. Hartelijk dank voor het pionierswerk en de inspiratie om Harbor te voorzien van externe community manga-bronnen!
-- **[Harbor Stremio](https://github.com/harborstremio/harbor)** voor het bouwen van een fantastische, moderne desktop-client voor anime, films, series en manga.
-- De open-source teams achter **[FlareSolverr](https://github.com/FlareSolverr/FlareSolverr)** en **[MangaDex](https://mangadex.org)** voor hun robuuste publieke API's en tools.
+This project was inspired by and built upon the foundation of:
+- **[wesazx](https://github.com/wesazx)** for the original [`harbor-atsu-source`](https://github.com/wesazx/harbor-atsu-source) repository. Thank you for the pioneering work and inspiration to bring external community manga sources to Harbor!
+- **[Harbor Stremio](https://github.com/harborstremio/harbor)** for creating an exceptional, modern desktop client for anime, movies, series, and manga.
+- The open-source teams behind **[FlareSolverr](https://github.com/FlareSolverr/FlareSolverr)** and **[MangaDex](https://mangadex.org)** for their outstanding public APIs and tools.
 
 ---
 
-## 📄 Disclaimer & Licentie
+## 📄 Disclaimer & License
 
-Deze extensies zijn uitsluitend bedoeld voor educatieve doeleinden en persoonlijk gebruik binnen de Harbor Stremio client. De ontwikkelaars hosten zelf geen media of auteursrechtelijk beschermd materiaal; alle content wordt rechtstreeks on-the-fly opgehaald via de respectievelijke publieke webbronnen en API's.
+These extensions are intended exclusively for educational and personal use within the Harbor Stremio reader client. The developers do not host or distribute any media or copyrighted content; all data is fetched on-the-fly directly from respective public web services and APIs. Licensed under the [MIT License](LICENSE).
